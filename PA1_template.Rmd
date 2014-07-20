@@ -1,20 +1,150 @@
-# Reproducible Research: Peer Assessment 1
+---
+title: "PA1_Template.md"
+author: "Darren Abramson"
+date: "July 19, 2014"
+output: html_document
+---
 
+### Loading and preprocessing the data
 
-## Loading and preprocessing the data
+The following code assigns the contents of the activity.zip file, activity.csv, to the R variable data.
 
+```{r loading, results="hide"}
 
+library(data.table)
+temp = tempfile()
+file.link("activity.zip", temp)
+data <- read.table(unz(temp, "activity.csv"), header = TRUE, sep=",")
+unlink(temp)
+```
 
-## What is mean total number of steps taken per day?
+The following code performs preprocessing of the data, including converting the date column to the date format.
 
+```{r preprocessing}
+data$date <- as.Date(data$date, format="%Y-%m-%d")
+```
 
+### Mean total number of steps taken per day
 
-## What is the average daily activity pattern?
+First, we examine the total number of steps taken each day.
 
+```{r histogram}
+numStepsPerDay <- aggregate(steps ~ date, data, sum) 
+hist(numStepsPerDay$steps, xlab = "Total number of steps in a day", main = "Histogram of steps in a day");
+```
 
+Now we examine mean and median of steps taken per today.
+
+First, we calculate the mean.
+
+```{r mean}
+mean(numStepsPerDay$steps)
+```
+
+Now, we calculate the median.
+
+```{r median}
+median(numStepsPerDay$steps)
+```
+
+## Average daily activity pattern
+
+For the average daily activity pattern, we begin by aggregating steps across intervals. In particular, we take the mean of steps on each day within a given interval.
+
+```{r daily pattern}
+avgStepsPerInterval <- aggregate(steps ~ interval, data, mean)
+```
+
+Now we plot the result.
+
+```{r daily pattern plot}
+plot(avgStepsPerInterval, type="l", xlab="5 minute interval", ylab="Mean steps taken", main="Mean steps per 5 minute interval")
+```
+
+To find the interval with the highest mean number of steps, we select the row of our table of mean steps per interval with maximum of the steps column.
+
+The interval value of this row is the desired maximum mean interval, confirmed by examining the plot above.
+
+```{r max interval}
+avgStepsPerInterval[which.max(avgStepsPerInterval$steps),]
+```
+
+Explicitly, the interval in question is returned by the following.
+
+```{r max interval num}
+avgStepsPerInterval[which.max(avgStepsPerInterval$steps),]$interval
+```
 
 ## Imputing missing values
 
+First, we calculate the number of `NA` values. I do this by subsetting out the appropriate rows, and then counting them -- I have no doubt that there are many different ways this could be calculated.
+
+```{r num na steps}
+nrow(subset(data, is.na(data$steps)))
+```
+
+Now we replace NA values by the mean for that interval.
+
+```{r replace NAs}
+naScrubbedData <- data
+naScrubbedData$intervalAvg <- NA
+matches <- match(naScrubbedData$interval, avgStepsPerInterval$interval)
+naScrubbedData$intervalAvg <- avgStepsPerInterval[matches,2] 
+naScrubbedData$steps[is.na(naScrubbedData$steps)] <- naScrubbedData$intervalAvg
+```
+
+Now we produce a histogram, mean and median as above, but with the scrubbed data.
+
+```{r scrubbed histogram}
+scrubbedNumStepsPerDay <- aggregate(steps ~ date, naScrubbedData, sum) 
+hist(scrubbedNumStepsPerDay$steps, xlab = "Total number of steps in a day", main = "Histogram of steps in a day");
+```
+
+Now we examine mean and median of steps taken per today.
+
+First, we calculate the mean.
+
+```{r scrubbed mean}
+mean(scrubbedNumStepsPerDay$steps)
+```
+
+Now, we calculate the median.
+
+```{r scrubbed median}
+median(scrubbedNumStepsPerDay$steps)
+```
+
+**Note**: the values we observe are very similar to the un-scrubbed data. This is likely due to the replacement of `NA` values with interval averages -- in effect, we are 'pushing' the data closer to the profile that we extracted in the un-scrubbed case. 
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+## Differences in activity patterns between weekdays and weekends
+
+We copy the scrubbed data to a new table for the purpose of adding a column with factors for weekend/weekday.
+
+```{r weekday and weekend factors}
+weekdayFactoredData <- naScrubbedData
+weekdayFactoredData$isWeekend <- weekdays(weekdayFactoredData$date)
+weekdayFactoredData$isWeekend <- weekdayFactoredData$isWeekend %in% c("Saturday", "Sunday")
+weekdayFactoredData$dayType <- NA
+weekdayFactoredData$dayType[weekdayFactoredData$isWeekend == TRUE] <- "weekend"
+weekdayFactoredData$dayType[weekdayFactoredData$isWeekend == FALSE] <- "weekday"
+
+```
+
+Now we panel plot the activity data across weekends and weekdays.
+
+
+```{r plotting weekday weekend data}
+weekEnd <- subset(weekdayFactoredData, weekdayFactoredData$dayType == "weekend")
+
+weekEndMean <- aggregate(steps ~ interval, weekEnd, mean)
+
+weekDay <- subset(weekdayFactoredData, weekdayFactoredData$dayType == "weekday")
+
+weekDayMean <- aggregate(steps ~ interval, weekDay, mean)
+
+par(mfrow=c(2,1));
+
+plot(weekDayMean, type="l", xlab="5 minute interval", ylab="Mean steps taken", main="Weekday steps per interval")
+plot(weekEndMean, type="l", xlab="5 minute interval", ylab="Mean steps taken", main="Weekend steps per interval")
+```
